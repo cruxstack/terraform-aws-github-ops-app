@@ -1,0 +1,62 @@
+name: test
+
+on:
+  pull_request:
+    branches: [ main ]
+  push:
+    branches: [ main ]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+env:
+  TF_IN_AUTOMATION: true
+
+jobs:
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
+      - name: Cache Terraform Plugins
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ${{ runner.temp }}/.terraform.d/plugin-cache
+          key: tf-plugins-${{ runner.os }}-${{ hashFiles('**/.terraform.lock.hcl') }}
+      - name: Initialize Terraform
+        run:  terraform init
+      - name: Suggest Terraform Format
+        if: github.event_name == 'pull_request'
+        uses: reviewdog/action-suggester@fc4b06f8697e1e66bd66703f660005079be0b3dc # v1.24.0
+        with:
+          tool_name: terraform-fmt
+          level: warning
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          fail_level: error
+      - name: Check Terraform Format
+        if: github.event_name == 'push'
+        run: terraform fmt -recursive -check
+      - name: Validate Terraform
+        uses: reviewdog/action-terraform-validate@6f4d41dfe9cf0c095aec3d341110eadb4c90c360 # v1.16.1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          reporter: github-pr-review
+          level: warning
+          fail_level: error
+      # - name: Lint Terraform
+      #   uses: reviewdog/action-tflint@9cbfc0aeae4af75fb73e8d5b6efbcd82e9483532 # v1.25.0
+      #   with:
+      #     reporter: github-pr-review
+      #     filter_mode: nofilter
+      #     fail_level: error
+      - name: Lint GitHub Actions
+        uses: reviewdog/action-actionlint@2ca4336c1821eaff87db1f72fd3923b3250e0427 # v1.69.0
+        with:
+          reporter: github-pr-check
+          fail_level: error
+          filter_mode: nofilter
