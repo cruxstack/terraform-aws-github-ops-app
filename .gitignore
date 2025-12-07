@@ -1,5 +1,6 @@
 # terraform files
 .terraform
+.terraform.*
 .terraformrc
 terraform.rc
 *.tfvars
