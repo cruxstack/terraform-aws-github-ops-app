@@ -143,6 +143,7 @@ variable "pr_compliance_config" {
   type = object({
     enabled            = optional(bool, false)
     monitored_branches = optional(list(string), ["main", "master"])
+    slack_footer_note  = optional(string, "")
   })
   default = {}
 }
