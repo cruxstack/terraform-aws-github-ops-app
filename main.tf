@@ -41,9 +41,12 @@ locals {
       APP_SLACK_TOKEN   = var.slack_config.token
       APP_SLACK_CHANNEL = var.slack_config.channel
       },
-      var.slack_config.channel_pr_bypass != "" ? { APP_SLACK_CHANNEL_PR_BYPASS = var.slack_config.channel_pr_bypass } : {},
       var.slack_config.channel_okta_sync != "" ? { APP_SLACK_CHANNEL_OKTA_SYNC = var.slack_config.channel_okta_sync } : {},
-      var.slack_config.channel_orphaned_users != "" ? { APP_SLACK_CHANNEL_ORPHANED_USERS = var.slack_config.channel_orphaned_users } : {}
+      var.slack_config.channel_orphaned_users != "" ? { APP_SLACK_CHANNEL_ORPHANED_USERS = var.slack_config.channel_orphaned_users } : {},
+      var.slack_config.channel_pr_bypass != "" ? {
+        APP_SLACK_CHANNEL_PR_BYPASS     = var.slack_config.channel_pr_bypass
+        APP_SLACK_FOOTER_NOTE_PR_BYPASS = var.pr_compliance_config.slack_footer_note
+      } : {},
     ) : {},
     # additional environment variables
     var.lambda_environment_variables
