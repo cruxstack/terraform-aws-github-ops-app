@@ -77,6 +77,12 @@ output "webhook_secret" {
   sensitive   = true
 }
 
+output "admin_token" {
+  description = "Admin token for accessing /server/* and /scheduled/* endpoints (generated if not provided)"
+  value       = try(local.admin_token, null)
+  sensitive   = true
+}
+
 # ============================================================== eventbridge ===
 
 output "eventbridge_rule_arn" {
