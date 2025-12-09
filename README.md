@@ -91,18 +91,19 @@ module "github_ops_app" {
 
 | Name                          | Description                                                                  | Type           | Default                                              | Required |
 |-------------------------------|------------------------------------------------------------------------------|----------------|------------------------------------------------------|:--------:|
-| `github_app_config`           | GitHub App configuration for authentication and webhook handling             | `object`       | n/a                                                  |   yes    |
-| `bot_version`                 | Version of the GitHub Ops App to use (`latest` or specific tag like `v0.1.0`)| `string`       | `"latest"`                                           |    no    |
-| `bot_repo`                    | GitHub repository URL for the GitHub Ops App source code                     | `string`       | `"https://github.com/cruxstack/github-ops-app.git"`  |    no    |
+| `admin_token_config`          | Configuration for admin token protecting some endpoints                      | `object`       | `{ enabled = true }`                                 |    no    |
+| `api_gateway_config`          | Configuration for the API Gateway                                            | `object`       | `{}`                                                 |    no    |
 | `bot_force_rebuild_id`        | ID to force rebuilding the Lambda function source code                       | `string`       | `""`                                                 |    no    |
+| `bot_repo`                    | GitHub repository URL for the GitHub Ops App source code                     | `string`       | `"https://github.com/cruxstack/github-ops-app.git"`  |    no    |
+| `bot_version`                 | Version of the GitHub Ops App to use (`latest` or specific tag like `v0.1.0`)| `string`       | `"latest"`                                           |    no    |
+| `github_app_config`           | GitHub App configuration for authentication and webhook handling             | `object`       | n/a                                                  |   yes    |
 | `lambda_config`               | Configuration for the Lambda function                                        | `object`       | `{}`                                                 |    no    |
-| `lambda_log_retention_days`   | Number of days to retain Lambda function logs                                | `number`       | `30`                                                 |    no    |
 | `lambda_environment_variables`| Additional environment variables for the Lambda function                     | `map(string)`  | `{}`                                                 |    no    |
+| `lambda_log_retention_days`   | Number of days to retain Lambda function logs                                | `number`       | `30`                                                 |    no    |
 | `okta_config`                 | Okta configuration for user and group synchronization                        | `object`       | `{}`                                                 |    no    |
 | `okta_sync_schedule`          | EventBridge schedule configuration for automatic Okta sync                   | `object`       | `{}`                                                 |    no    |
 | `pr_compliance_config`        | Configuration for PR compliance monitoring                                   | `object`       | `{}`                                                 |    no    |
 | `slack_config`                | Slack integration configuration for notifications                            | `object`       | `{}`                                                 |    no    |
-| `api_gateway_config`          | Configuration for the API Gateway                                            | `object`       | `{}`                                                 |    no    |
 | `ssm_parameter_arns`          | List of SSM Parameter Store ARNs for secrets retrieval                       | `list(string)` | `[]`                                                 |    no    |
 
 ### GitHub App Config
@@ -189,6 +190,17 @@ slack_config = {
 
 Per-notification channels are optional and fall back to the default `channel` if not specified.
 
+### Admin Token Config
+
+```hcl
+admin_token_config = {
+  enabled = bool    # Enable admin token protection (default: true)
+  token   = string  # (optional) Admin token - auto-generated if not provided
+}
+```
+
+When enabled, requests to `/server/*` and `/scheduled/*` endpoints require an `Authorization: Bearer <token>` header. If no token is provided, a secure 32-character token is automatically generated and available via the `admin_token` output.
+
 ## Outputs
 
 | Name                             | Description                                          |
@@ -207,6 +219,7 @@ Per-notification channels are optional and fall back to the default `channel` if
 | `api_gateway_execution_arn`      | Execution ARN of the API Gateway                     |
 | `webhook_url`                    | Full webhook URL to configure in GitHub App settings |
 | `webhook_secret`                 | Webhook secret to configure in GitHub App            |
+| `admin_token`                    | Admin token for `/server/*` and `/scheduled/*` endpoints |
 | `eventbridge_rule_arn`           | ARN of the EventBridge rule for scheduled Okta sync  |
 | `eventbridge_rule_name`          | Name of the EventBridge rule                         |
 

@@ -10,6 +10,9 @@ locals {
   # use provided webhook secret or generate one
   github_webhook_secret = var.github_app_config.webhook_secret != "" ? var.github_app_config.webhook_secret : random_password.webhook_secret[0].result
 
+  # use provided admin token or generate one (only if enabled)
+  admin_token = var.admin_token_config.enabled ? (var.admin_token_config.token != "" ? var.admin_token_config.token : random_password.admin_token[0].result) : ""
+
   lambda_environment = merge(
     {
       # github app config
@@ -26,6 +29,8 @@ locals {
       APP_PR_COMPLIANCE_ENABLED = tostring(var.pr_compliance_config.enabled)
       APP_PR_MONITORED_BRANCHES = var.pr_compliance_config.enabled ? join(",", var.pr_compliance_config.monitored_branches) : ""
     },
+    # admin token config (conditional)
+    local.admin_token != "" ? { APP_ADMIN_TOKEN = local.admin_token } : {},
     # okta config (conditional)
     var.okta_config.enabled ? merge({
       APP_OKTA_DOMAIN                      = var.okta_config.domain
@@ -61,6 +66,13 @@ data "aws_partition" "current" {}
 
 resource "random_password" "webhook_secret" {
   count = local.enabled && var.github_app_config.webhook_secret == "" ? 1 : 0
+
+  length  = 32
+  special = false
+}
+
+resource "random_password" "admin_token" {
+  count = local.enabled && var.admin_token_config.enabled && var.admin_token_config.token == "" ? 1 : 0
 
   length  = 32
   special = false

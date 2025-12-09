@@ -181,6 +181,18 @@ variable "api_gateway_config" {
   default = {}
 }
 
+# ------------------------------------------------------------------- admin ---
+
+variable "admin_token_config" {
+  description = "Configuration for the admin token that protects /server/* and /scheduled/* endpoints. When enabled and token is not provided, one will be automatically generated."
+  sensitive   = true
+  type = object({
+    enabled = optional(bool, true)
+    token   = optional(string, "")
+  })
+  default = {}
+}
+
 # --------------------------------------------------------------------- ssm ---
 
 variable "ssm_parameter_arns" {
