@@ -94,3 +94,13 @@ output "eventbridge_rule_name" {
   description = "Name of the EventBridge rule for scheduled Okta sync (if enabled)"
   value       = try(aws_cloudwatch_event_rule.okta_sync[0].name, null)
 }
+
+output "eventbridge_security_alerts_rule_arn" {
+  description = "ARN of the EventBridge rule for scheduled security alerts monitoring (if enabled)"
+  value       = try(aws_cloudwatch_event_rule.security_alerts[0].arn, null)
+}
+
+output "eventbridge_security_alerts_rule_name" {
+  description = "Name of the EventBridge rule for scheduled security alerts monitoring (if enabled)"
+  value       = try(aws_cloudwatch_event_rule.security_alerts[0].name, null)
+}

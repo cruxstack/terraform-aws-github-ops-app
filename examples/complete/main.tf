@@ -69,14 +69,28 @@ module "github_ops_app" {
     monitored_branches = ["main", "master", "release/*"]
   }
 
+  # security alerts monitoring
+  security_alerts_config = {
+    enabled      = true
+    min_age_days = 30     # only report alerts older than 30 days
+    min_severity = "high" # minimum severity: critical, high, medium, low
+  }
+
+  # schedule security alerts check daily
+  security_alerts_schedule = {
+    enabled             = true
+    schedule_expression = "rate(24 hours)"
+  }
+
   # slack notifications (optional)
   slack_config = {
-    enabled                = true
-    token                  = var.slack_token
-    channel                = var.slack_channel
-    channel_pr_bypass      = var.slack_channel_pr_bypass      # optional: override for PR bypass alerts
-    channel_okta_sync      = var.slack_channel_okta_sync      # optional: override for sync reports
-    channel_orphaned_users = var.slack_channel_orphaned_users # optional: override for orphaned user alerts
+    enabled                 = true
+    token                   = var.slack_token
+    channel                 = var.slack_channel
+    channel_pr_bypass       = var.slack_channel_pr_bypass       # optional: override for PR bypass alerts
+    channel_okta_sync       = var.slack_channel_okta_sync       # optional: override for sync reports
+    channel_orphaned_users  = var.slack_channel_orphaned_users  # optional: override for orphaned user alerts
+    channel_security_alerts = var.slack_channel_security_alerts # optional: override for security alerts
   }
 
   # lambda configuration
@@ -181,6 +195,12 @@ variable "slack_channel_okta_sync" {
 variable "slack_channel_orphaned_users" {
   type        = string
   description = "Slack channel ID for orphaned user alerts (optional, falls back to slack_channel)"
+  default     = ""
+}
+
+variable "slack_channel_security_alerts" {
+  type        = string
+  description = "Slack channel ID for security alerts (optional, falls back to slack_channel)"
   default     = ""
 }
 

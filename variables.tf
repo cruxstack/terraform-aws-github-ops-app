@@ -136,6 +136,42 @@ variable "okta_sync_schedule" {
   }
 }
 
+# ------------------------------------------------------- security alerts ---
+
+variable "security_alerts_config" {
+  description = "Configuration for monitoring stale GitHub security alerts (Dependabot, code scanning, and secret scanning)."
+  type = object({
+    enabled      = optional(bool, false)
+    min_age_days = optional(number, 30)
+    min_severity = optional(string, "high")
+  })
+  default = {}
+
+  validation {
+    condition     = var.security_alerts_config.min_age_days >= 1
+    error_message = "Security alerts min_age_days must be at least 1."
+  }
+
+  validation {
+    condition     = contains(["critical", "high", "medium", "low"], var.security_alerts_config.min_severity)
+    error_message = "Security alerts min_severity must be one of: critical, high, medium, low."
+  }
+}
+
+variable "security_alerts_schedule" {
+  description = "EventBridge schedule configuration for periodic security alerts monitoring."
+  type = object({
+    enabled             = optional(bool, false)
+    schedule_expression = optional(string, "rate(24 hours)")
+  })
+  default = {}
+
+  validation {
+    condition     = !var.security_alerts_schedule.enabled || can(regex("^(rate|cron)\\(", var.security_alerts_schedule.schedule_expression))
+    error_message = "Schedule expression must be a valid EventBridge rate or cron expression."
+  }
+}
+
 # ----------------------------------------------------------- pr compliance ---
 
 variable "pr_compliance_config" {
@@ -154,12 +190,13 @@ variable "slack_config" {
   description = "Slack integration configuration for sending notifications."
   sensitive   = true
   type = object({
-    enabled                = optional(bool, false)
-    token                  = optional(string, "")
-    channel                = optional(string, "")
-    channel_pr_bypass      = optional(string, "")
-    channel_okta_sync      = optional(string, "")
-    channel_orphaned_users = optional(string, "")
+    enabled                 = optional(bool, false)
+    token                   = optional(string, "")
+    channel                 = optional(string, "")
+    channel_pr_bypass       = optional(string, "")
+    channel_okta_sync       = optional(string, "")
+    channel_orphaned_users  = optional(string, "")
+    channel_security_alerts = optional(string, "")
   })
   default = {}
 
