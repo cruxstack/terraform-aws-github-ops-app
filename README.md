@@ -1,18 +1,17 @@
 # terraform-aws-github-ops-app
 
-Terraform module that deploys the [GitHub Ops App](https://github.com/cruxstack/github-ops-app) 
-to AWS Lambda with API Gateway for webhook handling.
+Terraform module that deploys the
+[GitHub Ops App](https://github.com/cruxstack/github-ops-app) to AWS Lambda with
+API Gateway for webhook handling.
 
 ## Features
 
-- **Okta Group Sync** - Automatically syncs Okta groups to GitHub teams based
-  on configurable rules
+- **Okta Group Sync** - Automatically syncs Okta groups to GitHub teams based on
+  configurable rules
 - **Orphaned User Detection** - Identifies org members not in any synced Okta
   teams
-- **PR Compliance Monitoring** - Detects when PRs bypass branch protection
-  rules
-- **Automatic Reconciliation** - Detects external team changes and triggers
-  sync
+- **PR Compliance Monitoring** - Detects when PRs bypass branch protection rules
+- **Automatic Reconciliation** - Detects external team changes and triggers sync
 - **Slack Notifications** - Rich messages for violations and sync reports
 
 ## Usage
@@ -74,7 +73,7 @@ module "github_ops_app" {
 
 ## Quick Start
 
-- **Create a GitHub App** with the required permissions 
+- **Create a GitHub App** with the required permissions
   - [GitHub Ops App documentation](https://github.com/cruxstack/github-ops-app))
 - **Deploy this module** with your GitHub App credentials
 - **Configure the webhook URL** in your GitHub App settings using the
@@ -89,22 +88,22 @@ module "github_ops_app" {
 
 ## Inputs
 
-| Name                          | Description                                                                  | Type           | Default                                              | Required |
-|-------------------------------|------------------------------------------------------------------------------|----------------|------------------------------------------------------|:--------:|
-| `admin_token_config`          | Configuration for admin token protecting some endpoints                      | `object`       | `{ enabled = true }`                                 |    no    |
-| `api_gateway_config`          | Configuration for the API Gateway                                            | `object`       | `{}`                                                 |    no    |
-| `bot_force_rebuild_id`        | ID to force rebuilding the Lambda function source code                       | `string`       | `""`                                                 |    no    |
-| `bot_repo`                    | GitHub repository URL for the GitHub Ops App source code                     | `string`       | `"https://github.com/cruxstack/github-ops-app.git"`  |    no    |
-| `bot_version`                 | Version of the GitHub Ops App to use (`latest` or specific tag like `v0.1.0`)| `string`       | `"latest"`                                           |    no    |
-| `github_app_config`           | GitHub App configuration for authentication and webhook handling             | `object`       | n/a                                                  |   yes    |
-| `lambda_config`               | Configuration for the Lambda function                                        | `object`       | `{}`                                                 |    no    |
-| `lambda_environment_variables`| Additional environment variables for the Lambda function                     | `map(string)`  | `{}`                                                 |    no    |
-| `lambda_log_retention_days`   | Number of days to retain Lambda function logs                                | `number`       | `30`                                                 |    no    |
-| `okta_config`                 | Okta configuration for user and group synchronization                        | `object`       | `{}`                                                 |    no    |
-| `okta_sync_schedule`          | EventBridge schedule configuration for automatic Okta sync                   | `object`       | `{}`                                                 |    no    |
-| `pr_compliance_config`        | Configuration for PR compliance monitoring                                   | `object`       | `{}`                                                 |    no    |
-| `slack_config`                | Slack integration configuration for notifications                            | `object`       | `{}`                                                 |    no    |
-| `ssm_parameter_arns`          | List of SSM Parameter Store ARNs for secrets retrieval                       | `list(string)` | `[]`                                                 |    no    |
+| Name                           | Description                                                                   | Type           | Default                                             | Required |
+| ------------------------------ | ----------------------------------------------------------------------------- | -------------- | --------------------------------------------------- | :------: |
+| `admin_token_config`           | Configuration for admin token protecting some endpoints                       | `object`       | `{ enabled = true }`                                |    no    |
+| `api_gateway_config`           | Configuration for the API Gateway                                             | `object`       | `{}`                                                |    no    |
+| `bot_force_rebuild_id`         | ID to force rebuilding the Lambda function source code                        | `string`       | `""`                                                |    no    |
+| `bot_repo`                     | GitHub repository URL for the GitHub Ops App source code                      | `string`       | `"https://github.com/cruxstack/github-ops-app.git"` |    no    |
+| `bot_version`                  | Version of the GitHub Ops App to use (`latest` or specific tag like `v0.1.0`) | `string`       | `"latest"`                                          |    no    |
+| `github_app_config`            | GitHub App configuration for authentication and webhook handling              | `object`       | n/a                                                 |   yes    |
+| `lambda_config`                | Configuration for the Lambda function                                         | `object`       | `{}`                                                |    no    |
+| `lambda_environment_variables` | Additional environment variables for the Lambda function                      | `map(string)`  | `{}`                                                |    no    |
+| `lambda_log_retention_days`    | Number of days to retain Lambda function logs                                 | `number`       | `30`                                                |    no    |
+| `okta_config`                  | Okta configuration for user and group synchronization                         | `object`       | `{}`                                                |    no    |
+| `okta_sync_schedule`           | EventBridge schedule configuration for automatic Okta sync                    | `object`       | `{}`                                                |    no    |
+| `pr_compliance_config`         | Configuration for PR compliance monitoring                                    | `object`       | `{}`                                                |    no    |
+| `slack_config`                 | Slack integration configuration for notifications                             | `object`       | `{}`                                                |    no    |
+| `ssm_parameter_arns`           | List of SSM Parameter Store ARNs for secrets retrieval                        | `list(string)` | `[]`                                                |    no    |
 
 ### GitHub App Config
 
@@ -161,7 +160,9 @@ sync_rules = [
 ]
 ```
 
-See the [GitHub Ops App documentation](https://github.com/cruxstack/github-ops-app/blob/main/docs/okta-setup.md#step-10-configure-sync-rules) for detailed sync rule configuration.
+See the
+[GitHub Ops App documentation](https://github.com/cruxstack/github-ops-app/blob/main/docs/okta-setup.md#step-10-configure-sync-rules)
+for detailed sync rule configuration.
 
 ### Lambda Config
 
@@ -188,7 +189,8 @@ slack_config = {
 }
 ```
 
-Per-notification channels are optional and fall back to the default `channel` if not specified.
+Per-notification channels are optional and fall back to the default `channel` if
+not specified.
 
 ### Admin Token Config
 
@@ -199,29 +201,32 @@ admin_token_config = {
 }
 ```
 
-When enabled, requests to `/server/*` and `/scheduled/*` endpoints require an `Authorization: Bearer <token>` header. If no token is provided, a secure 32-character token is automatically generated and available via the `admin_token` output.
+When enabled, requests to `/server/*` and `/scheduled/*` endpoints require an
+`Authorization: Bearer <token>` header. If no token is provided, a secure
+32-character token is automatically generated and available via the
+`admin_token` output.
 
 ## Outputs
 
-| Name                             | Description                                          |
-|----------------------------------|------------------------------------------------------|
-| `lambda_function_arn`            | ARN of the GitHub Ops App Lambda function            |
-| `lambda_function_name`           | Name of the GitHub Ops App Lambda function           |
-| `lambda_function_qualified_arn`  | Qualified ARN of the Lambda function                 |
-| `lambda_function_invoke_arn`     | Invoke ARN of the Lambda function                    |
-| `lambda_role_arn`                | ARN of the IAM role used by the Lambda function      |
-| `lambda_role_name`               | Name of the IAM role used by the Lambda function     |
-| `cloudwatch_log_group_name`      | Name of the CloudWatch Log Group                     |
-| `cloudwatch_log_group_arn`       | ARN of the CloudWatch Log Group                      |
-| `api_gateway_id`                 | ID of the API Gateway HTTP API                       |
-| `api_gateway_arn`                | ARN of the API Gateway HTTP API                      |
-| `api_gateway_endpoint`           | Base URL of the API Gateway                          |
-| `api_gateway_execution_arn`      | Execution ARN of the API Gateway                     |
-| `webhook_url`                    | Full webhook URL to configure in GitHub App settings |
-| `webhook_secret`                 | Webhook secret to configure in GitHub App            |
-| `admin_token`                    | Admin token for `/server/*` and `/scheduled/*` endpoints |
-| `eventbridge_rule_arn`           | ARN of the EventBridge rule for scheduled Okta sync  |
-| `eventbridge_rule_name`          | Name of the EventBridge rule                         |
+| Name                            | Description                                              |
+| ------------------------------- | -------------------------------------------------------- |
+| `lambda_function_arn`           | ARN of the GitHub Ops App Lambda function                |
+| `lambda_function_name`          | Name of the GitHub Ops App Lambda function               |
+| `lambda_function_qualified_arn` | Qualified ARN of the Lambda function                     |
+| `lambda_function_invoke_arn`    | Invoke ARN of the Lambda function                        |
+| `lambda_role_arn`               | ARN of the IAM role used by the Lambda function          |
+| `lambda_role_name`              | Name of the IAM role used by the Lambda function         |
+| `cloudwatch_log_group_name`     | Name of the CloudWatch Log Group                         |
+| `cloudwatch_log_group_arn`      | ARN of the CloudWatch Log Group                          |
+| `api_gateway_id`                | ID of the API Gateway HTTP API                           |
+| `api_gateway_arn`               | ARN of the API Gateway HTTP API                          |
+| `api_gateway_endpoint`          | Base URL of the API Gateway                              |
+| `api_gateway_execution_arn`     | Execution ARN of the API Gateway                         |
+| `webhook_url`                   | Full webhook URL to configure in GitHub App settings     |
+| `webhook_secret`                | Webhook secret to configure in GitHub App                |
+| `admin_token`                   | Admin token for `/server/*` and `/scheduled/*` endpoints |
+| `eventbridge_rule_arn`          | ARN of the EventBridge rule for scheduled Okta sync      |
+| `eventbridge_rule_name`         | Name of the EventBridge rule                             |
 
 ## Architecture
 
@@ -259,7 +264,7 @@ When enabled, requests to `/server/*` and `/scheduled/*` endpoints require an `A
 ## Requirements
 
 | Name      | Version |
-|-----------|---------|
+| --------- | ------- |
 | terraform | >= 1.3  |
 | aws       | >= 5.0  |
 

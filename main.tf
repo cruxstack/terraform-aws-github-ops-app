@@ -28,7 +28,14 @@ locals {
       # pr compliance config
       APP_PR_COMPLIANCE_ENABLED = tostring(var.pr_compliance_config.enabled)
       APP_PR_MONITORED_BRANCHES = var.pr_compliance_config.enabled ? join(",", var.pr_compliance_config.monitored_branches) : ""
+
+      # security alerts config
+      APP_SECURITY_ALERTS_ENABLED = tostring(var.security_alerts_config.enabled)
     },
+    var.security_alerts_config.enabled ? {
+      APP_SECURITY_ALERTS_MIN_AGE_DAYS = tostring(var.security_alerts_config.min_age_days)
+      APP_SECURITY_ALERTS_MIN_SEVERITY = var.security_alerts_config.min_severity
+    } : {},
     # admin token config (conditional)
     local.admin_token != "" ? { APP_ADMIN_TOKEN = local.admin_token } : {},
     # okta config (conditional)
@@ -48,6 +55,7 @@ locals {
       },
       var.slack_config.channel_okta_sync != "" ? { APP_SLACK_CHANNEL_OKTA_SYNC = var.slack_config.channel_okta_sync } : {},
       var.slack_config.channel_orphaned_users != "" ? { APP_SLACK_CHANNEL_ORPHANED_USERS = var.slack_config.channel_orphaned_users } : {},
+      var.slack_config.channel_security_alerts != "" ? { APP_SLACK_CHANNEL_SECURITY_ALERTS = var.slack_config.channel_security_alerts } : {},
       var.slack_config.channel_pr_bypass != "" ? {
         APP_SLACK_CHANNEL_PR_BYPASS     = var.slack_config.channel_pr_bypass
         APP_SLACK_FOOTER_NOTE_PR_BYPASS = var.pr_compliance_config.slack_footer_note
@@ -249,6 +257,40 @@ resource "aws_lambda_permission" "eventbridge" {
   function_name = aws_lambda_function.this[0].function_name
   principal     = "events.amazonaws.com"
   source_arn    = aws_cloudwatch_event_rule.okta_sync[0].arn
+}
+
+resource "aws_cloudwatch_event_rule" "security_alerts" {
+  count = local.enabled && var.security_alerts_schedule.enabled ? 1 : 0
+
+  name                = "${module.this.id}-security-alerts"
+  description         = "Scheduled trigger for GitHub security alerts monitoring"
+  schedule_expression = var.security_alerts_schedule.schedule_expression
+  tags                = module.this.tags
+}
+
+resource "aws_cloudwatch_event_target" "security_alerts" {
+  count = local.enabled && var.security_alerts_schedule.enabled ? 1 : 0
+
+  rule      = aws_cloudwatch_event_rule.security_alerts[0].name
+  target_id = "SecurityAlertsLambda"
+  arn       = aws_lambda_function.this[0].arn
+
+  input = jsonencode({
+    path       = "/scheduled/security-alerts"
+    httpMethod = "POST"
+    headers    = {}
+    body       = ""
+  })
+}
+
+resource "aws_lambda_permission" "eventbridge_security_alerts" {
+  count = local.enabled && var.security_alerts_schedule.enabled ? 1 : 0
+
+  statement_id  = "AllowExecutionFromEventBridgeSecurityAlerts"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.this[0].function_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.security_alerts[0].arn
 }
 
 # ---------------------------------------------------------------------- iam ---
