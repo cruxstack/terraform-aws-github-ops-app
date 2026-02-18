@@ -241,12 +241,24 @@ resource "aws_cloudwatch_event_target" "okta_sync" {
   target_id = "OktaSyncLambda"
   arn       = aws_lambda_function.this[0].arn
 
-  input = jsonencode({
-    path       = "/scheduled/okta-sync"
-    httpMethod = "POST"
-    headers    = {}
-    body       = ""
-  })
+  input_transformer {
+    input_paths = {
+      source      = "$.source"
+      detail_type = "$.detail-type"
+      time        = "$.time"
+      region      = "$.region"
+    }
+    input_template = <<-EOF
+      {
+        "version": "0",
+        "source": <source>,
+        "detail-type": <detail_type>,
+        "time": <time>,
+        "region": <region>,
+        "detail": {"action": "okta-sync"}
+      }
+    EOF
+  }
 }
 
 resource "aws_lambda_permission" "eventbridge" {
@@ -275,12 +287,24 @@ resource "aws_cloudwatch_event_target" "security_alerts" {
   target_id = "SecurityAlertsLambda"
   arn       = aws_lambda_function.this[0].arn
 
-  input = jsonencode({
-    path       = "/scheduled/security-alerts"
-    httpMethod = "POST"
-    headers    = {}
-    body       = ""
-  })
+  input_transformer {
+    input_paths = {
+      source      = "$.source"
+      detail_type = "$.detail-type"
+      time        = "$.time"
+      region      = "$.region"
+    }
+    input_template = <<-EOF
+      {
+        "version": "0",
+        "source": <source>,
+        "detail-type": <detail_type>,
+        "time": <time>,
+        "region": <region>,
+        "detail": {"action": "security-alerts"}
+      }
+    EOF
+  }
 }
 
 resource "aws_lambda_permission" "eventbridge_security_alerts" {
