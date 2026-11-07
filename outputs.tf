@@ -1,50 +1,50 @@
 # ================================================================== lambda ===
 
 output "lambda_function_arn" {
-  description = "ARN of the GitHub Ops App Lambda function"
+  description = "ARN of the Lambda function"
   value       = try(aws_lambda_function.this[0].arn, null)
 }
 
 output "lambda_function_name" {
-  description = "Name of the GitHub Ops App Lambda function"
+  description = "Name of the Lambda function"
   value       = try(aws_lambda_function.this[0].function_name, null)
 }
 
 output "lambda_function_qualified_arn" {
-  description = "Qualified ARN of the GitHub Ops App Lambda function"
+  description = "Qualified ARN of the Lambda function"
   value       = try(aws_lambda_function.this[0].qualified_arn, null)
 }
 
 output "lambda_function_invoke_arn" {
-  description = "Invoke ARN of the GitHub Ops App Lambda function"
+  description = "Invoke ARN of the Lambda function"
   value       = try(aws_lambda_function.this[0].invoke_arn, null)
 }
 
 # --------------------------------------------------------------------- iam ---
 
 output "lambda_role_arn" {
-  description = "ARN of the IAM role used by the Lambda function"
+  description = "ARN of the Lambda function's IAM role"
   value       = try(aws_iam_role.this[0].arn, null)
 }
 
 output "lambda_role_name" {
-  description = "Name of the IAM role used by the Lambda function"
+  description = "Name of the Lambda function's IAM role"
   value       = try(aws_iam_role.this[0].name, null)
 }
 
-# --------------------------------------------------------------- cloudwatch ---
+# -------------------------------------------------------------- cloudwatch ---
 
 output "cloudwatch_log_group_name" {
-  description = "Name of the CloudWatch Log Group for Lambda function logs"
+  description = "Name of the Lambda function's log group"
   value       = try(aws_cloudwatch_log_group.lambda[0].name, null)
 }
 
 output "cloudwatch_log_group_arn" {
-  description = "ARN of the CloudWatch Log Group for Lambda function logs"
+  description = "ARN of the Lambda function's log group"
   value       = try(aws_cloudwatch_log_group.lambda[0].arn, null)
 }
 
-# -------------------------------------------------------------- api gateway ---
+# ------------------------------------------------------------- api gateway ---
 
 output "api_gateway_id" {
   description = "ID of the API Gateway HTTP API"
@@ -57,7 +57,7 @@ output "api_gateway_arn" {
 }
 
 output "api_gateway_endpoint" {
-  description = "Base URL of the API Gateway (use this as the GitHub webhook URL base)"
+  description = "Base URL of the API Gateway, without the stage"
   value       = try(aws_apigatewayv2_api.this[0].api_endpoint, null)
 }
 
@@ -66,41 +66,63 @@ output "api_gateway_execution_arn" {
   value       = try(aws_apigatewayv2_api.this[0].execution_arn, null)
 }
 
+output "public_url" {
+  description = "Base URL of the app's routes, including the stage"
+  value       = local.public_url != "" ? local.public_url : null
+}
+
 output "webhook_url" {
-  description = "Full webhook URL to configure in GitHub App settings"
-  value       = try("${aws_apigatewayv2_stage.this[0].invoke_url}/webhooks", null)
+  description = "Webhook URL to set in the GitHub App's settings"
+  value       = local.public_url != "" ? "${local.public_url}/webhooks" : null
+}
+
+output "setup_url" {
+  description = "URL of the GitHub App installer, when it is enabled"
+  value       = local.public_url != "" && local.installer_enabled ? "${local.public_url}/setup" : null
 }
 
 output "webhook_secret" {
-  description = "Webhook secret to configure in GitHub App settings (generated if not provided)"
-  value       = try(local.github_webhook_secret, null)
+  description = "Webhook secret to set in the GitHub App's settings (generated if not provided); null when the installer creates the app"
+  value       = local.enabled && !local.installer_enabled ? local.github_webhook_secret : null
   sensitive   = true
 }
 
 output "admin_token" {
-  description = "Admin token for accessing /server/* and /scheduled/* endpoints (generated if not provided)"
-  value       = try(local.admin_token, null)
+  description = "Admin token for the /server/* and /scheduled/* endpoints (generated if not provided)"
+  value       = local.enabled && local.admin_enabled ? local.admin_token : null
   sensitive   = true
 }
 
-# ============================================================== eventbridge ===
+# --------------------------------------------------------------------- ssm ---
+
+output "ssm_parameter_prefix" {
+  description = "SSM path under which secrets and the installer's credentials are kept"
+  value       = local.enabled ? local.ssm_parameter_prefix : null
+}
+
+output "ssm_parameter_arns" {
+  description = "ARNs of the secret parameters the module manages, by variable name"
+  value       = { for name, param in aws_ssm_parameter.secret : name => param.arn }
+}
+
+# ============================================================= eventbridge ===
 
 output "eventbridge_rule_arn" {
-  description = "ARN of the EventBridge rule for scheduled Okta sync (if enabled)"
+  description = "ARN of the Okta sync schedule rule, if enabled"
   value       = try(aws_cloudwatch_event_rule.okta_sync[0].arn, null)
 }
 
 output "eventbridge_rule_name" {
-  description = "Name of the EventBridge rule for scheduled Okta sync (if enabled)"
+  description = "Name of the Okta sync schedule rule, if enabled"
   value       = try(aws_cloudwatch_event_rule.okta_sync[0].name, null)
 }
 
 output "eventbridge_security_alerts_rule_arn" {
-  description = "ARN of the EventBridge rule for scheduled security alerts monitoring (if enabled)"
+  description = "ARN of the security alerts schedule rule, if enabled"
   value       = try(aws_cloudwatch_event_rule.security_alerts[0].arn, null)
 }
 
 output "eventbridge_security_alerts_rule_name" {
-  description = "Name of the EventBridge rule for scheduled security alerts monitoring (if enabled)"
+  description = "Name of the security alerts schedule rule, if enabled"
   value       = try(aws_cloudwatch_event_rule.security_alerts[0].name, null)
 }
