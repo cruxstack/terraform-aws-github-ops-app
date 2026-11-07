@@ -1,31 +1,35 @@
+# Builds github-ops-app (cruxstack/github-ops-app) for AWS Lambda
+# (provided.al2023) and packages it as a zip.
+
 # --------------------------------------------------------------------- base ---
 
-FROM golang:1.24-alpine AS base
+FROM golang:1.27 AS base
 
-ARG BOT_VERSION=latest
-ARG BOT_REPO=https://github.com/cruxstack/github-ops-app.git
+# a git tag, branch, or commit of github-ops-app; "latest" builds the default
+# branch, which can include breaking changes
+ARG APP_VERSION=v1.0.0
+ARG APP_REPO=https://github.com/cruxstack/github-ops-app.git
+ARG GOARCH=arm64
 
-WORKDIR /build
+ENV GOOS=linux
+ENV GOARCH=${GOARCH}
+ENV CGO_ENABLED=0
+# let newer app versions download the go toolchain their go.mod requires
+ENV GOTOOLCHAIN=auto
 
-RUN apk add --no-cache git make zip
+WORKDIR /opt/app
 
-RUN if [ "${BOT_VERSION}" = "latest" ]; then \
-      git clone --depth 1 ${BOT_REPO} .; \
-    else \
-      git clone --depth 1 --branch ${BOT_VERSION} ${BOT_REPO} .; \
-    fi
-
-RUN GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build \
-    -ldflags="-s -w" \
-    -o bootstrap \
-    ./cmd/lambda
+RUN git clone "$APP_REPO" . \
+    && if [ "$APP_VERSION" != "latest" ]; then git checkout "$APP_VERSION"; fi
+RUN go mod download
+RUN go build -trimpath -tags lambda.norpc -ldflags "-s -w -X main.version=${APP_VERSION}" -o dist/bootstrap ./cmd/lambda
 
 # ------------------------------------------------------------------ package ---
 
-FROM alpine:latest AS package
+FROM alpine:3.24 AS package
 
-COPY --from=base /build/bootstrap /opt/app/dist/bootstrap
+COPY --from=base /opt/app/dist /opt/app/dist
 
-RUN apk add zip \
+RUN apk add --no-cache zip \
     && cd /opt/app/dist \
-    && zip -r /tmp/package.zip .
+    && zip -X -r /tmp/package.zip .

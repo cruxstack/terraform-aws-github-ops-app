@@ -1,18 +1,38 @@
 # terraform-aws-github-ops-app
 
-Terraform module that deploys the
-[GitHub Ops App](https://github.com/cruxstack/github-ops-app) to AWS Lambda with
-API Gateway for webhook handling.
+Terraform module that deploys
+[github-ops-app](https://github.com/cruxstack/github-ops-app) to AWS Lambda,
+with an API Gateway HTTP API for GitHub webhooks and EventBridge schedules for
+its periodic jobs.
 
 ## Features
 
-- **Okta Group Sync** - Automatically syncs Okta groups to GitHub teams based on
-  configurable rules
-- **Orphaned User Detection** - Identifies org members not in any synced Okta
-  teams
-- **PR Compliance Monitoring** - Detects when PRs bypass branch protection rules
-- **Automatic Reconciliation** - Detects external team changes and triggers sync
-- **Slack Notifications** - Rich messages for violations and sync reports
+- **Okta group sync** - Sync Okta group members to GitHub teams on a schedule
+  and after someone changes a team outside Okta
+- **PR compliance monitoring** - Report PRs merged without the reviews and
+  status checks their branch requires
+- **Security alerts monitoring** - Report stale Dependabot, code scanning, and
+  secret scanning alerts
+- **GitHub App installer** - Optionally create the GitHub App from the
+  function, with its credentials saved to SSM
+- **Secrets in SSM** - Secrets are SecureString parameters the function reads
+  at startup, not values in its configuration
+- **Slack notifications** - Reports for each feature, in per-feature channels
+
+## Requirements
+
+| Name      | Version     |
+| --------- | ----------- |
+| terraform | `>= 1.7`    |
+| aws       | `>= 6.72.0` |
+| buildkit  | `>= 0.0.2`  |
+| random    | `>= 3.9.1`  |
+
+The module builds the function from source with the
+[cruxstack/buildkit](https://registry.terraform.io/providers/cruxstack/buildkit)
+provider, which needs a BuildKit endpoint where Terraform runs: Docker Desktop,
+OrbStack, or Colima, `BUILDKIT_HOST`, or an embedded rootless `buildkitd` on
+Linux.
 
 ## Usage
 
@@ -22,211 +42,187 @@ module "github_ops_app" {
 
   name = "github-ops"
 
-  # github app configuration (required)
-  # webhook_secret is optional - if not provided, one will be auto-generated
   github_app_config = {
-    app_id          = "123456"
-    private_key     = var.github_app_private_key
-    installation_id = "12345678"
-    org             = "my-org"
+    org         = "acme"
+    app_id      = "123456"
+    private_key = var.github_app_private_key
   }
 
-  # okta configuration (optional)
   okta_config = {
-    enabled               = true
-    domain                = "mycompany.okta.com"
-    client_id             = var.okta_client_id
-    private_key           = var.okta_private_key
-    github_user_field     = "login"
-    sync_safety_threshold = 0.5
+    enabled     = true
+    domain      = "acme.okta.com"
+    client_id   = var.okta_client_id
+    private_key = var.okta_private_key
     sync_rules = [
       {
-        okta_group  = "engineering-team"
-        github_team = "engineers"
-      }
+        okta_group_pattern     = "^github-eng-"
+        strip_prefix           = "github-eng-"
+        github_team_prefix     = "eng-"
+        create_team_if_missing = true
+      },
     ]
   }
 
-  # schedule okta sync every hour
   okta_sync_schedule = {
-    enabled             = true
-    schedule_expression = "rate(1 hour)"
+    enabled = true
   }
 
-  # pr compliance monitoring
   pr_compliance_config = {
     enabled            = true
-    monitored_branches = ["main", "master"]
+    monitored_branches = ["main", "release/*"]
   }
 
-  # slack notifications (optional)
   slack_config = {
-    enabled                = true
-    token                  = var.slack_token
-    channel                = "#github-ops"
-    channel_pr_bypass      = "#security-alerts"      # optional: override for PR bypass alerts
-    channel_okta_sync      = "#team-sync"            # optional: override for sync reports
-    channel_orphaned_users = "#security-alerts"      # optional: override for orphaned user alerts
+    enabled = true
+    token   = var.slack_token
+    channel = "C01234ABCDE"
   }
 }
 ```
 
-## Quick Start
+Then set the GitHub App's webhook URL and secret to the `webhook_url` and
+`webhook_secret` outputs. The app needs the permissions listed in
+[github-ops-app's setup guide](https://github.com/cruxstack/github-ops-app/blob/main/docs/github-app-setup.md#permissions).
 
-- **Create a GitHub App** with the required permissions
-  - [GitHub Ops App documentation](https://github.com/cruxstack/github-ops-app))
-- **Deploy this module** with your GitHub App credentials
-- **Configure the webhook URL** in your GitHub App settings using the
-  `webhook_url` output
-- **Optionally configure Okta** for team synchronization
-- **Optionally configure Slack** for notifications
+See [examples/complete](examples/complete) for every feature.
 
-## Examples
+### GitHub App Installer
 
-- [Complete Example](examples/complete) - Full configuration with all features
-  enabled
+Leave out the GitHub App's credentials and enable the installer to create the
+app from the function:
+
+```hcl
+module "github_ops_app" {
+  source = "github.com/cruxstack/terraform-aws-github-ops-app?ref=v1.0.0"
+
+  name = "github-ops"
+
+  github_app_config = { org = "acme" }
+  installer_config  = { enabled = true }
+}
+```
+
+1. Apply, and open the `setup_url` output.
+2. Create the app; the installer fills in the webhook URL, and GitHub asks you
+   to confirm.
+3. Install the app on the organization from the success page.
+
+The installer saves the app's credentials as SSM parameters under the
+`ssm_parameter_prefix` output, and the next invocation reads them. Once an app
+is registered, the function refuses new installer codes. Afterwards, set
+`installer_config.enabled = false`; the function keeps reading the saved
+credentials. Terraform doesn't manage the parameters the installer creates, so
+`terraform destroy` leaves them.
+
+### Secrets
+
+Each secret the module passes to the function (the GitHub App private key,
+webhook secret, Okta private key, Slack token, and admin token) is a
+SecureString parameter under `ssm_config.parameter_prefix`, and the function
+gets the parameter's ARN, so the value doesn't appear in the function's
+configuration. The function's role can read only those parameters. Set
+`ssm_config.store_secrets = false` to pass them as plain environment variables
+instead.
+
+To keep a secret out of Terraform, set it to the ARN of a parameter you
+manage. The module passes the ARN as is and lets the function read that
+parameter:
+
+```hcl
+  slack_config = {
+    enabled = true
+    token   = "arn:aws:ssm:us-east-1:111122223333:parameter/slack/token"
+    channel = "C01234ABCDE"
+  }
+```
 
 ## Inputs
 
-| Name                           | Description                                                                   | Type           | Default                                             | Required |
-| ------------------------------ | ----------------------------------------------------------------------------- | -------------- | --------------------------------------------------- | :------: |
-| `admin_token_config`           | Configuration for admin token protecting some endpoints                       | `object`       | `{ enabled = true }`                                |    no    |
-| `api_gateway_config`           | Configuration for the API Gateway                                             | `object`       | `{}`                                                |    no    |
-| `bot_force_rebuild_id`         | ID to force rebuilding the Lambda function source code                        | `string`       | `""`                                                |    no    |
-| `bot_repo`                     | GitHub repository URL for the GitHub Ops App source code                      | `string`       | `"https://github.com/cruxstack/github-ops-app.git"` |    no    |
-| `bot_version`                  | Version of the GitHub Ops App to use (`latest` or specific tag like `v0.1.0`) | `string`       | `"latest"`                                          |    no    |
-| `github_app_config`            | GitHub App configuration for authentication and webhook handling              | `object`       | n/a                                                 |   yes    |
-| `lambda_config`                | Configuration for the Lambda function                                         | `object`       | `{}`                                                |    no    |
-| `lambda_environment_variables` | Additional environment variables for the Lambda function                      | `map(string)`  | `{}`                                                |    no    |
-| `lambda_log_retention_days`    | Number of days to retain Lambda function logs                                 | `number`       | `30`                                                |    no    |
-| `okta_config`                  | Okta configuration for user and group synchronization                         | `object`       | `{}`                                                |    no    |
-| `okta_sync_schedule`           | EventBridge schedule configuration for automatic Okta sync                    | `object`       | `{}`                                                |    no    |
-| `pr_compliance_config`         | Configuration for PR compliance monitoring                                    | `object`       | `{}`                                                |    no    |
-| `slack_config`                 | Slack integration configuration for notifications                             | `object`       | `{}`                                                |    no    |
-| `ssm_parameter_arns`           | List of SSM Parameter Store ARNs for secrets retrieval                        | `list(string)` | `[]`                                                |    no    |
+In addition to the variables documented below, this module includes several
+other optional variables (e.g., `name`, `tags`, etc.) provided by the
+`cloudposse/label/null` module. Please refer to its [documentation](https://registry.terraform.io/modules/cloudposse/label/null/latest)
+for more details on these variables.
 
-### GitHub App Config
+| Name                           | Description                                                                                             | Type           | Default                                             | Required |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------- | -------------- | --------------------------------------------------- | -------- |
+| `github_app_config`            | GitHub App: `org`, `app_id`, `private_key`, `installation_id`, `webhook_secret`, `base_url` (sensitive) | `object`       | n/a                                                 | yes      |
+| `app_version`                  | git tag, branch, or commit of github-ops-app to build; `latest` builds its default branch               | `string`       | `"v1.0.0"`                                          | no       |
+| `app_repo`                     | git URL of the github-ops-app source                                                                    | `string`       | `"https://github.com/cruxstack/github-ops-app.git"` | no       |
+| `app_force_rebuild_id`         | change to force a rebuild of the function's code                                                        | `string`       | `""`                                                | no       |
+| `log_level`                    | `debug`, `info`, `warn`, or `error`                                                                     | `string`       | `"info"`                                            | no       |
+| `installer_config`             | `enabled`: serve the GitHub App installer at `/setup`                                                   | `object`       | `{}`                                                | no       |
+| `ssm_config`                   | `store_secrets`, `parameter_prefix` (default `/<id>/`), `kms_key_arn`                                   | `object`       | `{}`                                                | no       |
+| `ssm_parameter_arns`           | other parameter ARNs the function may read                                                              | `list(string)` | `[]`                                                | no       |
+| `admin_token_config`           | `enabled`, `token` (generated if empty, at least 16 characters) (sensitive)                             | `object`       | `{}`                                                | no       |
+| `okta_config`                  | Okta group sync; see [below](#okta-sync-rules) (sensitive)                                              | `object`       | `{}`                                                | no       |
+| `okta_sync_schedule`           | `enabled`, `schedule_expression` (default `rate(1 hour)`)                                               | `object`       | `{}`                                                | no       |
+| `pr_compliance_config`         | `enabled`, `monitored_branches` (names or globs), `slack_footer_note`                                   | `object`       | `{}`                                                | no       |
+| `security_alerts_config`       | `enabled`, `min_age_days` (default `30`), `min_severity` (default `high`)                               | `object`       | `{}`                                                | no       |
+| `security_alerts_schedule`     | `enabled`, `schedule_expression` (default `rate(24 hours)`)                                             | `object`       | `{}`                                                | no       |
+| `slack_config`                 | `enabled`, `token`, `channel`, and `channel_*` overrides per report (sensitive)                         | `object`       | `{}`                                                | no       |
+| `api_gateway_config`           | `enabled`, `stage_name` (default `v1`), `throttling_burst_limit`, `throttling_rate_limit`               | `object`       | `{}`                                                | no       |
+| `lambda_config`                | `memory_size` (256), `timeout` (600), `architecture` (`arm64`), `reserved_concurrent_executions`        | `object`       | `{}`                                                | no       |
+| `lambda_log_retention_days`    | days to keep the function's and API's logs                                                              | `number`       | `30`                                                | no       |
+| `lambda_environment_variables` | more environment variables for the function; they override the module's                                 | `map(string)`  | `{}`                                                | no       |
 
-```hcl
-github_app_config = {
-  app_id          = string  # GitHub App ID
-  private_key     = string  # GitHub App private key (PEM format)
-  installation_id = string  # GitHub App installation ID
-  org             = string  # GitHub organization name
-  webhook_secret  = string  # (optional) GitHub webhook secret - auto-generated if not provided
-}
-```
+### Okta Sync Rules
 
-### Okta Config
-
-```hcl
-okta_config = {
-  enabled                      = bool         # Enable Okta integration (default: false)
-  domain                       = string       # Okta domain (e.g., "mycompany.okta.com")
-  client_id                    = string       # Okta OAuth client ID
-  private_key                  = string       # Okta private key for OAuth
-  key_id                       = string       # (optional) Okta private key ID
-  github_user_field            = string       # Okta field containing GitHub username (default: "login")
-  sync_rules                   = list(any)    # List of sync rules mapping Okta groups to GitHub teams
-  sync_safety_threshold        = number       # Safety threshold to prevent mass removal (default: 0.5)
-  orphaned_user_notifications  = bool         # Notify about users not in any synced team (default: true)
-}
-```
-
-#### Sync Rules
-
-Sync rules support both simple and pattern-based formats:
+`okta_config` takes the domain, `client_id`, `private_key`, optional
+`private_key_id` and `scopes`, `github_user_field` (default `githubUsername`),
+`sync_safety_threshold` (default `0.5`), `orphaned_user_notifications`
+(default `true`), and `sync_rules`. Each rule sets exactly one of
+`okta_group_name` and `okta_group_pattern`:
 
 ```hcl
-# Simple format - direct mapping
 sync_rules = [
   {
-    okta_group  = "engineering-team"
-    github_team = "engineers"
-  }
-]
-
-# Pattern-based format - for multiple groups
-sync_rules = [
-  {
-    name                   = "sync-engineering-teams"
-    enabled                = true
-    okta_group_pattern     = "^github-eng-.*"
-    github_team_prefix     = "eng-"
-    strip_prefix           = "github-eng-"
-    sync_members           = true
+    name                   = "platform"
+    okta_group_name        = "Platform Engineers"
+    github_team_name       = "platform"
     create_team_if_missing = true
-  }
+  },
+  {
+    name               = "engineering-teams"
+    okta_group_pattern = "^github-eng-"
+    strip_prefix       = "github-eng-"
+    github_team_prefix = "eng-"
+    team_privacy       = "secret"
+  },
 ]
 ```
 
-See the
-[GitHub Ops App documentation](https://github.com/cruxstack/github-ops-app/blob/main/docs/okta-setup.md#step-10-configure-sync-rules)
-for detailed sync rule configuration.
-
-### Lambda Config
-
-```hcl
-lambda_config = {
-  memory_size                    = number  # Memory in MB (default: 256)
-  timeout                        = number  # Timeout in seconds (default: 30)
-  runtime                        = string  # Lambda runtime (default: "provided.al2023")
-  architecture                   = string  # CPU architecture (default: "x86_64")
-  reserved_concurrent_executions = number  # Reserved concurrency (default: -1, unreserved)
-}
-```
-
-### Slack Config
-
-```hcl
-slack_config = {
-  enabled                = bool    # Enable Slack integration (default: false)
-  token                  = string  # Slack bot token (xoxb-...)
-  channel                = string  # Default Slack channel ID for notifications
-  channel_pr_bypass      = string  # (optional) Channel for PR bypass alerts
-  channel_okta_sync      = string  # (optional) Channel for sync reports
-  channel_orphaned_users = string  # (optional) Channel for orphaned user alerts
-}
-```
-
-Per-notification channels are optional and fall back to the default `channel` if
-not specified.
-
-### Admin Token Config
-
-```hcl
-admin_token_config = {
-  enabled = bool    # Enable admin token protection (default: true)
-  token   = string  # (optional) Admin token - auto-generated if not provided
-}
-```
-
-When enabled, requests to `/server/*` and `/scheduled/*` endpoints require an
-`Authorization: Bearer <token>` header. If no token is provided, a secure
-32-character token is automatically generated and available via the
-`admin_token` output.
+The other fields are `enabled`, `sync_members`, and `create_team_if_missing`,
+which defaults to `false`: a missing team is reported instead of created. See
+[github-ops-app's sync rules](https://github.com/cruxstack/github-ops-app#okta-sync-rules)
+for what each does.
 
 ## Outputs
 
-| Name                            | Description                                              |
-| ------------------------------- | -------------------------------------------------------- |
-| `lambda_function_arn`           | ARN of the GitHub Ops App Lambda function                |
-| `lambda_function_name`          | Name of the GitHub Ops App Lambda function               |
-| `lambda_function_qualified_arn` | Qualified ARN of the Lambda function                     |
-| `lambda_function_invoke_arn`    | Invoke ARN of the Lambda function                        |
-| `lambda_role_arn`               | ARN of the IAM role used by the Lambda function          |
-| `lambda_role_name`              | Name of the IAM role used by the Lambda function         |
-| `cloudwatch_log_group_name`     | Name of the CloudWatch Log Group                         |
-| `cloudwatch_log_group_arn`      | ARN of the CloudWatch Log Group                          |
-| `api_gateway_id`                | ID of the API Gateway HTTP API                           |
-| `api_gateway_arn`               | ARN of the API Gateway HTTP API                          |
-| `api_gateway_endpoint`          | Base URL of the API Gateway                              |
-| `api_gateway_execution_arn`     | Execution ARN of the API Gateway                         |
-| `webhook_url`                   | Full webhook URL to configure in GitHub App settings     |
-| `webhook_secret`                | Webhook secret to configure in GitHub App                |
-| `admin_token`                   | Admin token for `/server/*` and `/scheduled/*` endpoints |
-| `eventbridge_rule_arn`          | ARN of the EventBridge rule for scheduled Okta sync      |
-| `eventbridge_rule_name`         | Name of the EventBridge rule                             |
+| Name                                    | Description                                                                  |
+| --------------------------------------- | ---------------------------------------------------------------------------- |
+| `webhook_url`                           | webhook URL to set in the GitHub App's settings                              |
+| `webhook_secret`                        | webhook secret to set in the GitHub App (sensitive); null with the installer |
+| `setup_url`                             | URL of the GitHub App installer, when enabled                                |
+| `public_url`                            | base URL of the app's routes, including the stage                            |
+| `admin_token`                           | token for the `/server/*` and `/scheduled/*` endpoints (sensitive)           |
+| `ssm_parameter_prefix`                  | SSM path of the secrets and the installer's credentials                      |
+| `ssm_parameter_arns`                    | ARNs of the secret parameters the module manages, by name                    |
+| `lambda_function_arn`                   | ARN of the Lambda function                                                   |
+| `lambda_function_name`                  | name of the Lambda function                                                  |
+| `lambda_function_qualified_arn`         | qualified ARN of the Lambda function                                         |
+| `lambda_function_invoke_arn`            | invoke ARN of the Lambda function                                            |
+| `lambda_role_arn`                       | ARN of the function's IAM role                                               |
+| `lambda_role_name`                      | name of the function's IAM role                                              |
+| `cloudwatch_log_group_name`             | name of the function's log group                                             |
+| `cloudwatch_log_group_arn`              | ARN of the function's log group                                              |
+| `api_gateway_id`                        | ID of the HTTP API                                                           |
+| `api_gateway_arn`                       | ARN of the HTTP API                                                          |
+| `api_gateway_endpoint`                  | base URL of the HTTP API, without the stage                                  |
+| `api_gateway_execution_arn`             | execution ARN of the HTTP API                                                |
+| `eventbridge_rule_arn`                  | ARN of the Okta sync schedule, if enabled                                    |
+| `eventbridge_rule_name`                 | name of the Okta sync schedule, if enabled                                   |
+| `eventbridge_security_alerts_rule_arn`  | ARN of the security alerts schedule, if enabled                              |
+| `eventbridge_security_alerts_rule_name` | name of the security alerts schedule, if enabled                             |
 
 ## Architecture
 
@@ -235,21 +231,21 @@ When enabled, requests to `/server/*` and `/scheduled/*` endpoints require an
                                     |   GitHub App     |
                                     +--------+---------+
                                              |
-                                             | Webhooks
+                                             | webhooks
                                              v
-+------------------+              +----------+---------+
-|   EventBridge    |              |    API Gateway     |
-|   (Scheduled)    |              |    HTTP API        |
-+--------+---------+              +----------+---------+
-         |                                   |
-         |  /scheduled/okta-sync             |  /webhooks
-         |                                   |
-         +----------------+------------------+
-                          |
-                          v
-               +----------+---------+
-               |       Lambda       |
-               |   GitHub Ops App   |
++------------------+              +----------+---------+     +-------------+
+|   EventBridge    |              |    API Gateway     |     |     SSM     |
+|   schedules      |              |    HTTP API        |     |   secrets   |
++--------+---------+              +----------+---------+     +------+------+
+         |                                   |                      |
+         |  {"action": "okta-sync"}          |  /webhooks           |
+         |                                   |                      |
+         +----------------+------------------+                      |
+                          |                                         |
+                          v                                         |
+               +----------+---------+                               |
+               |       Lambda       | <-----------------------------+
+               |   github-ops-app   |
                +----------+---------+
                           |
           +---------------+---------------+
@@ -261,12 +257,44 @@ When enabled, requests to `/server/*` and `/scheduled/*` endpoints require an
    +-------------+ +-------------+ +-------------+
 ```
 
-## Requirements
+## Upgrading to v1
 
-| Name      | Version |
-| --------- | ------- |
-| terraform | >= 1.3  |
-| aws       | >= 5.0  |
+v1 runs [github-ops-app v1](https://github.com/cruxstack/github-ops-app/blob/main/docs/upgrading-to-v1.md),
+which validates its configuration at startup, requires signed webhooks, and
+needs two more GitHub App permissions; read its upgrade guide too.
+
+| v0                                                | v1                                                              |
+| ------------------------------------------------- | --------------------------------------------------------------- |
+| `bot_version` (default `latest`)                  | `app_version` (pinned to `v1.0.0`)                              |
+| `bot_repo`                                        | `app_repo`                                                      |
+| `bot_force_rebuild_id`                            | `app_force_rebuild_id`                                          |
+| `okta_config.key_id`                              | `okta_config.private_key_id`; the old one never reached the app |
+| `okta_config.github_user_field` (default `login`) | default `githubUsername`, as in the app                         |
+| `okta_config.sync_rules` (`list(any)`)            | typed rules; unknown fields are an error                        |
+| `api_gateway_config.cors_allow_origins`           | removed; webhooks don't need CORS                               |
+| `lambda_config.runtime`                           | removed; always `provided.al2023`                               |
+
+Other changes:
+
+- **The function is built with the buildkit provider** instead of the
+  docker-based artifact packager, and redeploys when its code changes. The
+  packager's resources are forgotten from the state, not destroyed.
+- **Secrets move to SSM** SecureString parameters. Set
+  `ssm_config.store_secrets = false` to keep plain environment variables.
+- **The function runs on `arm64`** by default, built for the architecture you
+  choose; v0 always built an amd64 binary. Set
+  `lambda_config.architecture = "x86_64"` to keep the v0 architecture.
+- **The timeout is 600 seconds** by default, so a full Okta sync can finish.
+- `github_app_config.installation_id` is optional; the app looks it up.
+- `github_app_config.base_url` supports GitHub Enterprise Server.
+- `create_team_if_missing` defaults to `false` in the app; set it on rules that
+  should create teams.
+- With `stage_name = "$default"`, routes have no base path; v0 set a base path
+  of `/$default`, which broke every route.
+- The PR bypass footer note is sent without a PR bypass channel.
+- A schedule without its feature enabled is an error.
+- API Gateway routes are throttled (burst 100, 50 requests per second).
+- The module is checked with `terraform test` and tflint in CI.
 
 ## License
 
