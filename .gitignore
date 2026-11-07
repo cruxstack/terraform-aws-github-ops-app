@@ -14,25 +14,28 @@ override.tf.json
 *_override.tf
 *_override.tf.json
 
-# Crash log files
+# crash log files
 crash.log
 crash.*.log
 
-# IDE
+# ide
 .idea/
 .vscode/
 *.swp
 *.swo
 *~
 
-# OS
+# os
 .DS_Store
 Thumbs.db
 
-# Environment variables
+# environment variables
 .env
 .env.local
 
-# Build artifacts
+# build artifacts
 dist/
 *.zip
+
+# worktrees
+.worktrees/
